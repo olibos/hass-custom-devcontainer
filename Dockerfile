@@ -1,11 +1,7 @@
-#FROM homeassistant/home-assistant:dev
-FROM mcr.microsoft.com/devcontainers/python:1-3.13
+FROM mcr.microsoft.com/devcontainers/base:ubuntu
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-RUN \
-    curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
-    && apt-get update \
+# Install dependencies
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         bluez \
         libffi-dev \
@@ -22,30 +18,47 @@ RUN \
         liblapack3 \
         liblapack-dev \
         libatlas-base-dev \
-        \
         git \
         libpcap-dev \
+        python3 \
+        python3-pip \
+        python3-venv \
+        curl \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && source /usr/local/share/nvm/nvm.sh \
-    && nvm install lts/iron \
-    && pip install --upgrade wheel pip
+    && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/alexxit/go2rtc:latest /usr/local/bin/go2rtc /bin/go2rtc
-RUN pip3 install uv
+# Install Volta for Node.js management
+RUN curl https://get.volta.sh | bash \
+    && echo 'export VOLTA_HOME="$HOME/.volta"' >> /home/vscode/.bashrc \
+    && echo 'export PATH="$VOLTA_HOME/bin:$PATH"' >> /home/vscode/.bashrc
 
-EXPOSE 8123
+# Install Node.js LTS using Volta
+RUN bash -c "export VOLTA_HOME=/home/vscode/.volta && export PATH=\$VOLTA_HOME/bin:\$PATH && volta install node@lts"
 
-VOLUME /config
+# Install Python packages
+RUN pip3 install --no-cache-dir --upgrade wheel pip
+
+# Install Home Assistant
+RUN pip3 install --no-cache-dir homeassistant
+
+# Create vscode user if it doesn't exist and setup directories
+RUN if ! id -u vscode > /dev/null 2>&1; then \
+        useradd -m -s /bin/bash vscode; \
+    fi \
+    && mkdir -p /config/.storage \
+    && chown -R vscode:vscode /config
+
+# Copy container setup script
+COPY container /usr/bin/container
+COPY hassfest /usr/bin/hassfest
+RUN chmod +x /usr/bin/container /usr/bin/hassfest
 
 USER vscode
-ENV VIRTUAL_ENV="/home/vscode/.local/ha-venv"
-RUN uv venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-COPY requirements.txt /tmp/requirements.txt
-RUN uv pip install -r /tmp/requirements.txt
-COPY container /usr/bin
-COPY hassfest /usr/bin
+# Set working directory
+WORKDIR /workspaces
 
-CMD sudo -E container
+ENV HASS_USERNAME=dev
+ENV HASS_PASSWORD=dev
+
+CMD ["/usr/bin/container"]
