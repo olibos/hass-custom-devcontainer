@@ -28,12 +28,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Volta for Node.js management
+ENV VOLTA_HOME=/root/.volta
+ENV PATH="$VOLTA_HOME/bin:$PATH"
 RUN curl https://get.volta.sh | bash \
+    && volta install node@lts
+
+# Setup Volta for vscode user
+RUN mkdir -p /home/vscode/.volta \
+    && cp -r /root/.volta/* /home/vscode/.volta/ \
+    && chown -R vscode:vscode /home/vscode/.volta \
     && echo 'export VOLTA_HOME="$HOME/.volta"' >> /home/vscode/.bashrc \
     && echo 'export PATH="$VOLTA_HOME/bin:$PATH"' >> /home/vscode/.bashrc
-
-# Install Node.js LTS using Volta
-RUN bash -c "export VOLTA_HOME=/home/vscode/.volta && export PATH=\$VOLTA_HOME/bin:\$PATH && volta install node@lts"
 
 # Install Python packages
 RUN pip3 install --no-cache-dir --upgrade wheel pip
